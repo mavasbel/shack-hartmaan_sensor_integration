@@ -1,5 +1,4 @@
 clc;
-clear all;
 close all;
 disp('Start WFS.');
 disp(' ');
@@ -8,6 +7,7 @@ disp(' ');
 libname='C:\Program Files\IVI Foundation\VISA\Win64\Bin\WFS_64.dll';
 hfile='C:\Program Files\IVI Foundation\VISA\Win64\Include\WFS.h';
 if (libisloaded('WFS_64'))
+    a=calllib('WFS_64','WFS_close', hdl.value);
     unloadlibrary('WFS_64');
 end
 if (~libisloaded('WFS_64'))
@@ -21,7 +21,7 @@ end
 % Displays the functions in the library
 % Also gives the data types used in a command
 % - Not necessary for normal use -
-libfunctionsview 'WFS_64';
+% libfunctionsview 'WFS_64';
 
 % Some dll functions use pointers
 % The 'libpointer' command has to be used in MATLAB for this
@@ -59,28 +59,57 @@ calllib('WFS_64','WFS_init',res,1,1,hdl);
 calllib('WFS_64','WFS_SelectMla', hdl.value, 0);
 spotsx=libpointer('int32Ptr', 0);
 spotsy=libpointer('int32Ptr', 0);
-calllib('WFS_64','WFS_ConfigureCam', hdl.value, 0, 0, spotsx, spotsy);
-calllib('WFS_64','WFS_SetReferencePlane', hdl.value,0);
+calllib('WFS_64','WFS_ConfigureCam', hdl.value, 0, 2, spotsx, spotsy); % resolution 1024x1024
+calllib('WFS_64','WFS_SetReferencePlane', hdl.value, 0);
 calllib('WFS_64','WFS_SetPupil', hdl.value, 0.0, 0.0, 5.0, 5.0);
 
+resolutionx = 1024;
+resolutiony = 1024;
 while (true)
     % Take spotfield image
     exposureTimeAct=libpointer('doublePtr',0.0);
     masterGainAct=libpointer('doublePtr',0.0);
     
-    calllib('WFS_64','WFS_TakeSpotfieldImageAutoExpos', hdl.value, exposureTimeAct, masterGainAct);
-    imageBuf=libpointer('uint8Ptr',zeros(1216*1936,1));
+    calllib('WFS_64','WFS_TakeSpotfieldImageAutoExpos',hdl.value,exposureTimeAct,masterGainAct);
+    imageBuf=libpointer('uint8Ptr',zeros(resolutionx,resolutiony));
     rows=libpointer('int32Ptr',0);
     cols=libpointer('int32Ptr',0);
     calllib('WFS_64','WFS_GetSpotfieldImageCopy', hdl.value, imageBuf, rows, cols);
 
     % Change buffer array and show image of spotfield
-    pic=reshape(imageBuf.value, [1936,1216]);
-    image(pic);
+%     pic=reshape(imageBuf.value, [resolutionx,resolutiony]);
+    image(imageBuf.value);
 
     % Drawing and pausing
     drawnow;
 %     pause(0.25);
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Testing functions to compute points and calculate waveront
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    calllib('WFS_64','WFS_CalcSpotsCentrDiaIntens',hdl.value,1,1);
+    
+    centroidx=libpointer('singlePtr',zeros(resolutionx,resolutiony));
+    centroidy=libpointer('singlePtr',zeros(resolutionx,resolutiony));
+    calllib('WFS_64','WFS_GetSpotCentroids',hdl.value,centroidx,centroidy);
+    
+    beamCentroidx=libpointer('doublePtr',0);
+    beamCentroidy=libpointer('doublePtr',0);
+    beamDiax=libpointer('doublePtr',0);
+    beamDiay=libpointer('doublePtr',0);
+    calllib('WFS_64','WFS_CalcBeamCentroidDia', hdl.value, beamCentroidx, beamCentroidy, beamDiax, beamDiay);
+    
+    calllib('WFS_64','WFS_CalcSpotToReferenceDeviations', hdl.value, 1);
+    
+    deviationx=libpointer('singlePtr',zeros(resolutionx,resolutiony));
+    deviationy=libpointer('singlePtr',zeros(resolutionx,resolutiony));
+    calllib('WFS_64','WFS_GetSpotDeviations', hdl.value, deviationx, deviationy);
+
+    wavefront=libpointer('singlePtr',zeros(resolutionx,resolutiony));
+    calllib('WFS_64','WFS_CalcWavefront', hdl.value, 0, 0, wavefront);
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     key = get(gcf,'CurrentCharacter');
     if key==' '
